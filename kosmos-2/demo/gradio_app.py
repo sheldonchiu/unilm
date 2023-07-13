@@ -325,7 +325,7 @@ def main(cfg: FairseqConfig):
     logger.info("Type the input sentence and press return:")
     start_id = 0
     
-    def generate_predictions(image_input, text_input, do_sample, sampling_topp, sampling_temperature):
+    def generate_predictions(image_input, input_type, caption_input, text_input, do_sample, sampling_topp, sampling_temperature):
         
         if do_sample:
             cfg.generation.sampling = True
@@ -345,10 +345,13 @@ def main(cfg: FairseqConfig):
             user_image_path = "/tmp/user_input_test_image.jpg"
             image_input.save(user_image_path)
         
-        if text_input.lower() == 'brief':
-            inputs = f"[image]{user_image_path}<tab><grounding>An image of"
-        else:
-            inputs = f"[image]{user_image_path}<tab><grounding>Describe this image in detail:"
+        if input_type.lower() == 'text':
+            inputs = f"[image]{user_image_path}<tab>{text_input}"
+        elif input_type.lower() == 'caption':
+            if text_input.lower() == 'brief':
+                inputs = f"[image]{user_image_path}<tab><grounding>An image of"
+            else:
+                inputs = f"[image]{user_image_path}<tab><grounding>Describe this image in detail:"
         
         print("inputs", inputs)
         inputs = [inputs,]
@@ -487,7 +490,18 @@ def main(cfg: FairseqConfig):
         with gr.Row():
             with gr.Column():
                 image_input = gr.Image(type="pil", label="Test Image")  
-                text_input = gr.Radio(["Brief", "Detailed"], label="Description Type", value="Brief")
+                input_type = gr.Radio(["Text", "Caption"], label="Input Type", value="Caption")
+                caption_input = gr.Radio(["Brief", "Detailed"], label="Description Type", value="Brief", visible=True)
+                text_input = gr.Textbox(visible=False)
+                
+                def change_input_type(input_type):
+                    if input_type == "Text":
+                        return gr.update(visible=True), gr.update(visible=False)
+                    elif input_type == "Caption":
+                        return gr.update(visible=False), gr.update(visible=True)
+                    
+                input_type.change(change_input_type, input_type, [text_input, caption_input])
+                
                 do_sample = gr.Checkbox(label="Enable Sampling", info="(Please enable it before adjusting sampling parameters below)", value=False)
                 with gr.Accordion("Sampling parameters", open=False) as sampling_parameters:
                     sampling_topp = gr.Slider(minimum=0.1, maximum=1, step=0.01, value=0.9, label="Sampling: Top-P") 
@@ -509,21 +523,21 @@ def main(cfg: FairseqConfig):
                             ["demo/images/two_dogs.jpg", "Detailed", False],
                             ["demo/images/snowman.png", "Brief", False],
                             ["demo/images/man_ball.png", "Detailed", False],
-                        ], inputs=[image_input, text_input, do_sample])
+                        ], inputs=[image_input, input_type, caption_input, text_input, do_sample])
             with gr.Column():
                 gr.Examples(examples=[  
                             ["demo/images/six_planes.png", "Brief", False],
                             ["demo/images/quadrocopter.jpg", "Brief", False],  
                             ["demo/images/carnaby_street.jpg", "Brief", False],  
-                        ], inputs=[image_input, text_input, do_sample])
+                        ], inputs=[image_input, input_type, caption_input, text_input, do_sample])
         gr.Markdown(term_of_use)
         
         run_button.click(fn=generate_predictions, 
-                         inputs=[image_input, text_input, do_sample, sampling_topp, sampling_temperature],  
+                         inputs=[image_input, input_type, caption_input, text_input, do_sample, sampling_topp, sampling_temperature],  
                          outputs=[image_output, text_output1],  
                          show_progress=True, queue=True)
 
-    demo.launch(share=True)
+    demo.launch()
 
 # process the generated description for highlighting
 def remove_special_fields(text):  
