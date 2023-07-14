@@ -15,6 +15,7 @@ import ast
 import logging
 import math
 import os
+import glob
 import sys
 import time
 import re
@@ -341,20 +342,28 @@ def main(cfg: FairseqConfig):
             
         if image_input is None:
             user_image_path = None
+        elif input_type.lower() == "batch":
+            inputs = []
+            all_files = glob.glob(os.path.join(text_input, "*"))
+            image_files = [f for f in all_files if f.lower().endswith(tuple(['.jpg', '.png', '.jpeg', '.webp']))]
+            for image in image_files:
+                if caption_input.lower() == 'brief':
+                    inputs.append(f"[image]{user_image_path}<tab><grounding>An image of")
+                else:
+                    inputs.append(f"[image]{user_image_path}<tab><grounding>Describe this image in detail:")
         else:
             user_image_path = "/tmp/user_input_test_image.jpg"
             image_input.save(user_image_path)
-        
-        if input_type.lower() == 'text':
-            inputs = f"[image]{user_image_path}<tab>{text_input}"
-        elif input_type.lower() == 'caption':
-            if text_input.lower() == 'brief':
-                inputs = f"[image]{user_image_path}<tab><grounding>An image of"
-            else:
-                inputs = f"[image]{user_image_path}<tab><grounding>Describe this image in detail:"
-        
-        print("inputs", inputs)
-        inputs = [inputs,]
+
+            if input_type.lower() == 'text':
+                inputs = f"[image]{user_image_path}<tab>{text_input}"
+            elif input_type.lower() == 'caption':
+                if caption_input.lower() == 'brief':
+                    inputs = f"[image]{user_image_path}<tab><grounding>An image of"
+                else:
+                    inputs = f"[image]{user_image_path}<tab><grounding>Describe this image in detail:"
+            
+            inputs = [inputs,]
         
         results = []
         for batch in make_batches(inputs, cfg, task, max_positions, encode_fn):
@@ -490,15 +499,17 @@ def main(cfg: FairseqConfig):
         with gr.Row():
             with gr.Column():
                 image_input = gr.Image(type="pil", label="Test Image")  
-                input_type = gr.Radio(["Text", "Caption"], label="Input Type", value="Caption")
+                input_type = gr.Radio(["Text", "Caption", "Batch"], label="Input Type", value="Caption")
                 caption_input = gr.Radio(["Brief", "Detailed"], label="Description Type", value="Brief", visible=True)
-                text_input = gr.Textbox(visible=False)
+                text_input = gr.Textbox(visible=False, label="Text input/path to image folder")
                 
                 def change_input_type(input_type):
                     if input_type == "Text":
                         return gr.update(visible=True), gr.update(visible=False)
                     elif input_type == "Caption":
                         return gr.update(visible=False), gr.update(visible=True)
+                    elif input_type == "Batch":
+                        return gr.update(visible=True), gr.update(visible=True)
                     
                 input_type.change(change_input_type, input_type, [text_input, caption_input])
                 
