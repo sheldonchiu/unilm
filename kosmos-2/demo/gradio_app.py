@@ -45,6 +45,8 @@ global_image_path = None
 global_image_tensor = None
 global_cnt = 0
 
+result_output_dir = None
+
 # This is simple maximum entropy normalization performed in Inception paper
 inception_normalize = transforms.Compose(
     [transforms.Normalize(mean=[0.48145466, 0.4578275, 0.40821073], std=[0.26862954, 0.26130258, 0.27577711])]
@@ -326,7 +328,7 @@ def main(cfg: FairseqConfig):
     logger.info("Type the input sentence and press return:")
     start_id = 0
     
-    def generate_predictions(image_input, input_type, caption_input, text_input, do_sample, sampling_topp, sampling_temperature):
+    def generate_predictions(image_input, input_type, caption_input, text_input, output_path, do_sample, sampling_topp, sampling_temperature):
         
         if do_sample:
             cfg.generation.sampling = True
@@ -339,18 +341,22 @@ def main(cfg: FairseqConfig):
             cfg.generation.temperature = 1.0
             cfg.generation.beam = 1
         generator = task.build_generator(models, cfg.generation)
-            
-        if image_input is None:
-            user_image_path = None
-        elif input_type.lower() == "batch":
-            inputs = []
+        
+        inputs = []
+        image_files = []
+        if input_type.lower() == "batch":
+            os.makedirs(output_path, exist_ok=True)
             all_files = glob.glob(os.path.join(text_input, "*"))
             image_files = [f for f in all_files if f.lower().endswith(tuple(['.jpg', '.png', '.jpeg', '.webp']))]
             for image in image_files:
                 if caption_input.lower() == 'brief':
-                    inputs.append(f"[image]{user_image_path}<tab><grounding>An image of")
+                    inputs.append(f"[image]{image}<tab><grounding>An image of")
                 else:
-                    inputs.append(f"[image]{user_image_path}<tab><grounding>Describe this image in detail:")
+                    inputs.append(f"[image]{image}<tab><grounding>Describe this image in detail:")
+        elif image_input is None:
+            user_image_path = None
+            inputs = f"[image]{user_image_path}<tab><grounding>Describe this image in detail:"
+            inputs = [inputs,]
         else:
             user_image_path = "/tmp/user_input_test_image.jpg"
             image_input.save(user_image_path)
@@ -443,9 +449,16 @@ def main(cfg: FairseqConfig):
                 
                 # show the results on the image
                 response_str = detok_hypo_str.split('</image>')[-1]
+                
+                show = input_type.lower() == 'batch'
                 if global_image_path is not None:
                     basename = os.path.basename(global_image_path).split('.')[0]
-                    vis_image = visualize_results_on_image(global_image_path, response_str, task.args.location_bin_size, f"output/store_vis_results/show_box_on_{basename}.jpg", show=False)
+                    vis_image = visualize_results_on_image(global_image_path, response_str, task.args.location_bin_size, "", show=show)
+                if show:
+                    basename = os.path.basename(image_files[id_]).split('.')[0]
+                    vis_image = visualize_results_on_image(image_files[id_], response_str, task.args.location_bin_size, os.path.join(output_path, f"{basename}.jpg"), show=show)
+                    with open(os.path.join(output_path, f"{basename}.caption"), 'w') as f:
+                        f.write(remove_special_fields(response_str).replace(" Describe this image in detail: ",""))
                 # if global_image_tensor is not None:
                 #     basename = os.path.basename(global_image_path).split('.')[0]
                 #     vis_image = visualize_results_on_image(global_image_tensor, response_str, task.args.location_bin_size, f"output/store_vis_results/show_box_on_{basename}.jpg", show=False)
@@ -501,17 +514,18 @@ def main(cfg: FairseqConfig):
                 image_input = gr.Image(type="pil", label="Test Image")  
                 input_type = gr.Radio(["Text", "Caption", "Batch"], label="Input Type", value="Caption")
                 caption_input = gr.Radio(["Brief", "Detailed"], label="Description Type", value="Brief", visible=True)
-                text_input = gr.Textbox(visible=False, label="Text input/path to image folder")
+                text_input = gr.Textbox(label="Text input/path to image folder", visible=False)
+                output_path = gr.Textbox(label="Output Path", value="/storage/kosmos2", visible=False)
                 
                 def change_input_type(input_type):
                     if input_type == "Text":
-                        return gr.update(visible=True), gr.update(visible=False)
+                        return gr.update(visible=True), gr.update(visible=False), gr.update(visible=False)
                     elif input_type == "Caption":
-                        return gr.update(visible=False), gr.update(visible=True)
+                        return gr.update(visible=False), gr.update(visible=True), gr.update(visible=False)
                     elif input_type == "Batch":
-                        return gr.update(visible=True), gr.update(visible=True)
+                        return gr.update(visible=True), gr.update(visible=True), gr.update(visible=True)
                     
-                input_type.change(change_input_type, input_type, [text_input, caption_input])
+                input_type.change(change_input_type, input_type, [text_input, caption_input, output_path])
                 
                 do_sample = gr.Checkbox(label="Enable Sampling", info="(Please enable it before adjusting sampling parameters below)", value=False)
                 with gr.Accordion("Sampling parameters", open=False) as sampling_parameters:
@@ -534,17 +548,17 @@ def main(cfg: FairseqConfig):
                             ["demo/images/two_dogs.jpg", "Detailed", False],
                             ["demo/images/snowman.png", "Brief", False],
                             ["demo/images/man_ball.png", "Detailed", False],
-                        ], inputs=[image_input, input_type, caption_input, text_input, do_sample])
+                        ], inputs=[image_input, input_type, caption_input, text_input,output_path, do_sample])
             with gr.Column():
                 gr.Examples(examples=[  
                             ["demo/images/six_planes.png", "Brief", False],
                             ["demo/images/quadrocopter.jpg", "Brief", False],  
                             ["demo/images/carnaby_street.jpg", "Brief", False],  
-                        ], inputs=[image_input, input_type, caption_input, text_input, do_sample])
+                        ], inputs=[image_input, input_type, caption_input, text_input,output_path, do_sample])
         gr.Markdown(term_of_use)
         
         run_button.click(fn=generate_predictions, 
-                         inputs=[image_input, input_type, caption_input, text_input, do_sample, sampling_topp, sampling_temperature],  
+                         inputs=[image_input, input_type, caption_input, text_input, output_path, do_sample, sampling_topp, sampling_temperature],  
                          outputs=[image_output, text_output1],  
                          show_progress=True, queue=True)
 
