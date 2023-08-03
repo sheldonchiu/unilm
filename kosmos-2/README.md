@@ -23,6 +23,9 @@
     - [3. Referring expression generation](#3-referring-expression-generation)
     - [4. Image captioning](#4-image-captioning)
     - [5. Visual question answering](#5-visual-question-answering)
+  - [Training](#training)
+    - [1. Preparing data](#preparing-dataset)
+    - [2. Training script](#train-script)
   - [Citation](#citation)
   - [Acknowledgement](#acknowledgement)
   - [License](#license)
@@ -49,15 +52,15 @@ cd unilm/kosmos-2
 ```bash
 bash vl_setup_xl.sh
 ``` 
+(Refer to [comment](https://github.com/microsoft/unilm/issues/1204#issuecomment-1639812388) for detailed package info)
+
+Alternatively, you can refer to [this guide](docs/install.md) to set up a conda environment.
 
 ## Demo
 
 <!-- We host a public demo at [link](https://aka.ms/kosmos-2-demo). -->
 If you would like to host a local Gradio demo, run the following command after [setup](#setup):
 ```bash
-# install gradio
-pip install gradio
-
 bash run_gradio.sh
 ``` 
 If you encounter a `pydantic` error, refer to [comment](https://github.com/microsoft/unilm/issues/1185#issuecomment-1629305294) for a solution.
@@ -76,7 +79,6 @@ The format of data instance is:
 
 ```python
 {
-  'key': '000373938', 
   'clip_similarity_vitb32': 0.353271484375, 
   'clip_similarity_vitl14': 0.2958984375, 
   'id': 1795296605919, 
@@ -89,7 +91,6 @@ The format of data instance is:
 }
 
 ```
-- `key`: The file name in COYO-700M.
 - `clip_similarity_vitb32`: The cosine similarity between text and image(ViT-B/32) embeddings by [OpenAI CLIP](https://github.com/openai/CLIP), provided by COYO-700M.
 - `clip_similarity_vitl14`: The cosine similarity between text and image(ViT-L/14) embeddings by [OpenAI CLIP](https://github.com/openai/CLIP), provided by COYO-700M.
 - `id`: Unique 64-bit integer ID in COYO-700M.
@@ -117,7 +118,7 @@ We evaluate phrase grounding task on [Flickr30k Entities](https://github.com/Bry
 | ----- | --------------------- | ---------------------- |
 | Kosmos-2 | 77.8 | 78.7 |
 
-More results and evaluation code can be found in [evaluation/flickr/README.md](evaluation/flickr/README.md)
+More results and evaluation code can be found in [evaluation/flickr/README.md](evaluation/flickr_entities/README.md)
 
 ### 2. Referring expression comprehension
 We evaluate referring expression comprehension task on RefCOCO, RefCOCO+ and RefCOCOg under zero-shot setting. We report accuracy metric here.
@@ -140,28 +141,50 @@ We evaluate referring expression generation task on RefCOCOg under zero-shot and
 We will release the evaluation code in [here](evaluation/).
 
 ### 4. Image captioning
-<!-- We evaluate image captioning task on Flickr30K Karpathy split test set under zero-shot setting. We report CIDEr metric here.
+We evaluate image captioning task on Flickr30K Karpathy split test set under zero-shot setting. We report CIDEr metric here.
 
 | Model | CIDEr on Flickr30K | 
 | --- | --- |
 | Flamingo-3B | 60.6 |
 | Flamingo-9B | 61.5 | 
 | Kosmos-1 | 67.1 |
-| Kosmos-2 |  |  -->
+| Kosmos-2 | 80.5 | 
 
 We will release the evaluation code in [here](evaluation/).
 
 ### 5. Visual question answering
-<!-- We evaluate visual question answering task on the test-dev set of VQAv2 under zero-shot setting. We report VQA scores obtained from VQAv2 evaluation server.
+We evaluate visual question answering task on the test-dev set of VQAv2 under zero-shot setting. We report VQA scores obtained from VQAv2 evaluation server.
 
 | Model | Accuracy on VQAv2 | 
 | --- | --- |
 | Flamingo-3B | 49.2 |
 | Flamingo-9B | 51.8 | 
 | Kosmos-1 | 51.0 |
-| Kosmos-2 |  |  -->
+| Kosmos-2 | 51.1 | 
 
 We will release the evaluation code in [here](evaluation/). 
+
+## Training
+
+### Preparing dataset
+
+#### GrIT
+After downloading the data from [huggingface](https://huggingface.co/datasets/zzliang/GRIT) using img2dataset, you will obtain some tar files. After decompressing them, you can get the images and corresponding JSON files. Then, modify the file path in [prepare_grit.py](data/prepare_grit.py) and run this file to get the corresponding tsv files. If a tsv file is too large, you can split it into multiple ones yourself.
+
+After processing all the tar files into tsv files, run [generate_config.py](data/generate_config.py) to get a config file, which stores the paths of the tsv files. In [train.sh](train.sh), change the `--laion-data-dir` to the config directory path.
+
+#### Interleaved data
+Interleaved image-text data also needs to be processed in this way. To be updated.
+
+#### Text data
+To be updated.
+
+### Train script
+After preparing the data, run the following command to train the model.
+```bash
+bash train.sh
+```
+More training/instruction-tuning tasks will be updated.
 
 ## Citation
 
